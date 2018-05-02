@@ -80,7 +80,7 @@ class SSDMobileNetV1FeatureExtractor(ssd_meta_arch.SSDFeatureExtractor):
     """
     return (2.0 / 255.0) * resized_inputs - 1.0
 
-  def extract_features(self, preprocessed_inputs):
+  def extract_features(self, preprocessed_inputs, is_training=False):
     """Extract features from preprocessed inputs.
 
     Args:
@@ -106,7 +106,7 @@ class SSDMobileNetV1FeatureExtractor(ssd_meta_arch.SSDFeatureExtractor):
                            reuse=self._reuse_weights) as scope:
       with slim.arg_scope(
           mobilenet_v1.mobilenet_v1_arg_scope(
-              is_training=None, regularize_depthwise=True)):
+              is_training=is_training, regularize_depthwise=True)):
         with (slim.arg_scope(self._conv_hyperparams_fn())
               if self._override_base_feature_extractor_hyperparams
               else context_manager.IdentityContextManager()):

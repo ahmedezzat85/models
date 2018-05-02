@@ -354,6 +354,22 @@ def _build_detection_graph(input_type, detection_model, input_shape,
 
   return outputs, placeholder_tensor
 
+def _build_custom_detection_graph(detection_model, input_shape, output_collection_name):
+  """ Build the detection graph.
+  """
+  # Create Input Placeholder
+  input_tensor = tf.placeholder(dtype=tf.float32, shape=input_shape, name='input')
+  output_tensors = detection_model.predict(input_tensor, None)
+  
+  # Get output
+  outputs = {}
+  key = 'output'
+  out_tensor = output_tensors.get(key)
+  outputs[key] = tf.identity(out_tensor, name=key)
+  for output_key in outputs:
+    tf.add_to_collection(output_collection_name, outputs[output_key])
+  
+  return outputs, input_tensor
 
 def _export_inference_graph(input_type,
                             detection_model,
@@ -366,17 +382,22 @@ def _export_inference_graph(input_type,
                             graph_hook_fn=None):
   """Export helper."""
   tf.gfile.MakeDirs(output_directory)
-  frozen_graph_path = os.path.join(output_directory,
-                                   'frozen_inference_graph.pb')
-  saved_model_path = os.path.join(output_directory, 'saved_model')
-  model_path = os.path.join(output_directory, 'model.ckpt')
-
-  outputs, placeholder_tensor = _build_detection_graph(
-      input_type=input_type,
-      detection_model=detection_model,
-      input_shape=input_shape,
-      output_collection_name=output_collection_name,
-      graph_hook_fn=graph_hook_fn)
+  if input_type == 'input':
+    frozen_graph_path = os.path.join(output_directory, 'model_graph.pb')
+    saved_model_path = os.path.join(output_directory, 'model')
+    model_path = os.path.join(output_directory, 'chkpt')
+    outputs, placeholder_tensor = _build_custom_detection_graph(detection_model, input_shape, 
+                                                                output_collection_name)
+  else:
+    frozen_graph_path = os.path.join(output_directory, 'frozen_inference_graph.pb')
+    saved_model_path = os.path.join(output_directory, 'saved_model')
+    model_path = os.path.join(output_directory, 'model.ckpt')
+    outputs, placeholder_tensor = _build_detection_graph(
+        input_type=input_type,
+        detection_model=detection_model,
+        input_shape=input_shape,
+        output_collection_name=output_collection_name,
+        graph_hook_fn=graph_hook_fn)
 
   saver_kwargs = {}
   if use_moving_averages:
@@ -417,9 +438,7 @@ def _export_inference_graph(input_type,
       clear_devices=True,
       initializer_nodes='')
   write_frozen_graph(frozen_graph_path, frozen_graph_def)
-  write_saved_model(saved_model_path, frozen_graph_def,
-                    placeholder_tensor, outputs)
-
+  write_saved_model(saved_model_path, frozen_graph_def, placeholder_tensor, outputs)
 
 def export_inference_graph(input_type,
                            pipeline_config,
@@ -443,8 +462,7 @@ def export_inference_graph(input_type,
     additional_output_tensor_names: list of additional output
       tensors to include in the frozen graph.
   """
-  detection_model = model_builder.build(pipeline_config.model,
-                                        is_training=False)
+  detection_model = model_builder.build(pipeline_config.model, is_training=False)
   _export_inference_graph(input_type, detection_model,
                           pipeline_config.eval_config.use_moving_averages,
                           trained_checkpoint_prefix,
